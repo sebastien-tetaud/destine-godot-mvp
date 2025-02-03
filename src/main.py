@@ -28,4 +28,4 @@ pcd_gen.generate_point_cloud()
 pcd = pcd_gen.to_open3d()
 
 # Save the generated point cloud to a PLY file
-pcd_gen.save_point_cloud("test_3.ply")
+pcd_gen.save_point_cloud("model.ply")
