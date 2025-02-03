@@ -4,6 +4,7 @@ data/
 *.jpg
 *.tif
 *.laz
+*.ply
 
 
 # Byte-compiled / optimized / DLL files
