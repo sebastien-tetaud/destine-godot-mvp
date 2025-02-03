@@ -1,4 +1,6 @@
 import cv2 as cv
+import open3d as o3d
+import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import rasterio
@@ -114,3 +116,91 @@ def load_dem_utm(token, parameters,  bounds, width, height):
     dem_roi = dem.sel(x=x, y=y, method="nearest")
 
     return dem_roi[parameters]
+
+class PcdGenerator:
+    def __init__(self, sat_data, dem_data, sample_fraction=20):
+        """
+        Initialize the PCD Generator.
+
+        Args:
+            sat_data (numpy.ndarray): Sentinel-2 RGB data with shape (H, W, 3).
+            dem_data (xarray.DataArray): DEM data with coordinates.
+            sample_fraction (int): Percentage of points to sample (default: 20%).
+        """
+        self.sat_data = sat_data
+        self.dem_data = dem_data
+        self.sample_fraction = sample_fraction
+        self.point_cloud = None
+        self.df = None  # Dataframe holding point cloud data
+
+    def _normalize_rgb(self, rgb_array):
+        """Normalize RGB values to range [0, 1]."""
+        return np.array(rgb_array) / 255.0
+
+    def generate_point_cloud(self):
+        """Generate a point cloud from Sentinel-2 and DEM data."""
+        # Extract lat/lon and DSM values
+        lat_values = self.dem_data.coords['y'].values  # Latitude
+        lon_values = self.dem_data.coords['x'].values  # Longitude
+        dsm_values = self.dem_data.values  # Elevation
+
+        # Reshape Sentinel-2 RGB data to (N, 3)
+        tci_rgb = self.sat_data.reshape(-1, 3)
+        rgb_tuples = [tuple(rgb) for rgb in tci_rgb]
+
+        # Create a meshgrid for coordinates
+        lon_grid, lat_grid = np.meshgrid(lon_values, lat_values)
+
+        # Flatten everything to 1D
+        lon_flat = lon_grid.flatten()
+        lat_flat = lat_grid.flatten()
+        dsm_flat = dsm_values.flatten()
+
+        # Create a DataFrame to store point cloud data
+        df = pd.DataFrame({
+            'x': lon_flat,
+            'y': lat_flat,
+            'z': dsm_flat,
+            'color': rgb_tuples
+        })
+
+        print(f"Total points before sampling: {len(df)}")
+
+        # Apply sampling
+        sample_size = int(self.sample_fraction * len(df) / 100)
+        self.df = df[:sample_size]
+        print(f"Sampled points: {len(self.df)}")
+
+    def to_open3d(self):
+        """Convert the DataFrame to an Open3D PointCloud object."""
+        if self.df is None:
+            raise ValueError("Point cloud data not generated. Run `generate_point_cloud()` first.")
+
+        # Stack coordinates into a (N, 3) numpy array
+        points = np.column_stack((self.df['x'], self.df['y'], self.df['z'].values))
+
+        # Convert RGB colors to float values in range [0,1]
+        colors = np.array(self.df['color'].apply(lambda x: np.array(x))) / 255.0
+
+        # Create Open3D PointCloud object
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+
+        self.point_cloud = pcd
+        return pcd
+
+    def save_point_cloud(self, filename="point_cloud.ply"):
+        """Save the generated point cloud to a file."""
+        if self.point_cloud is None:
+            self.to_open3d()
+
+        o3d.io.write_point_cloud(filename, self.point_cloud)
+        print(f"Point cloud saved to {filename}")
+
+    def visualize(self):
+        """Visualize the point cloud using Open3D."""
+        if self.point_cloud is None:
+            self.to_open3d()
+
+        o3d.visualization.draw_geometries([self.point_cloud])
