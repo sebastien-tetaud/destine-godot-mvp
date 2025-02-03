@@ -1,5 +1,6 @@
 #custom
 data/
+sentinel2-data/
 *.png
 *.jpg
 *.tif
