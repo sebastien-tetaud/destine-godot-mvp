@@ -374,15 +374,17 @@ class PcdFilter:
 
     Attributes:
         df (pd.DataFrame): The DataFrame to be filtered.
+        df_target (pd.DataFrame): The target DataFrame to compute the bounding box from.
         bbox (dict): A dictionary containing the bounding box coordinates.
     """
 
     def __init__(self, df, df_target):
         """
-        Initialize the DataFilter with a DataFrame.
+        Initialize the PcdFilter with a DataFrame and a target DataFrame.
 
         Args:
             df (pd.DataFrame): The DataFrame to be filtered.
+            df_target (pd.DataFrame): The target DataFrame to compute the bounding box from.
         """
         self.df = df
         self.df_target = df_target
@@ -393,7 +395,6 @@ class PcdFilter:
         Set the bounding box coordinates based on a target DataFrame with an optional margin.
 
         Args:
-            df_target (pd.DataFrame): The target DataFrame to compute the bounding box from.
             margin (float): Margin to extend the bounding box. Default is 2.
         """
         x_min, x_max = self.df_target["x"].min(), self.df_target["x"].max()
@@ -414,6 +415,9 @@ class PcdFilter:
 
         Returns:
             pd.DataFrame: The filtered DataFrame.
+
+        Raises:
+            ValueError: If the bounding box is not set.
         """
         if self.bbox is None:
             raise ValueError("Bounding box is not set. Use `set_bounding_box_from_target` method first.")
@@ -435,9 +439,3 @@ class PcdFilter:
             pd.DataFrame: The concatenated DataFrame.
         """
         return pd.concat(df_list, axis=0)
-
-# Example usage
-# filterer = DataFilter(df)
-# filterer.set_bounding_box(x_min, x_max, y_min, y_max, margin=2)
-# df_filtered = filterer.filter_data()
-# combined_df = filterer.concatenate_dataframes([df_filtered, df_ign])
