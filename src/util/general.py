@@ -196,6 +196,21 @@ class IGNLidarProcessor:
             'classification': self.df["Classification"]
         })
 
+    def downsample(self, sample_fraction=0.1, random_state=42):
+        """
+        Downsample the point cloud by randomly sampling a fraction of the points.
+
+        Args:
+            sample_fraction (float): The fraction of points to sample. Default is 0.1.
+            random_state (int): Seed for the random number generator. Default is 42.
+        """
+        if self.df is None:
+            raise ValueError("Point cloud data not generated. Run `generate_point_cloud()` first.")
+
+        # Perform random sampling
+        self.df = self.df.sample(frac=sample_fraction, random_state=random_state)
+        print(f"Point cloud downsampled with sample fraction {sample_fraction}")
+
 
 
     def generate_color(self):
@@ -221,7 +236,7 @@ class IGNLidarProcessor:
 
 
 class PcdGenerator:
-    def __init__(self, sat_data, dem_data, sample_fraction=20):
+    def __init__(self, sat_data, dem_data, sample_fraction=0.2):
         """
         Initialize the PCD Generator.
 
@@ -260,19 +275,32 @@ class PcdGenerator:
         dsm_flat = dsm_values.flatten()
 
         # Create a DataFrame to store point cloud data
-        df = pd.DataFrame({
+        self.df = pd.DataFrame({
             'x': lon_flat,
             'y': lat_flat,
             'z': dsm_flat,
             'color': rgb_tuples
         })
 
-        print(f"Total points before sampling: {len(df)}")
+        print(f"Total points before sampling: {len(self.df)}")
 
-        # Apply sampling
-        sample_size = int(self.sample_fraction * len(df) / 100)
-        self.df = df[:sample_size]
-        print(f"Sampled points: {len(self.df)}")
+        # # Apply sampling
+        # sample_size = int(self.sample_fraction * len(df) / 100)
+        # self.df = df[:sample_size]
+        # print(f"Sampled points: {len(self.df)}")
+
+    def downsample(self, sample_fraction=0.1, random_state=42):
+        """
+        Downsample the point cloud by randomly sampling a fraction of the points.
+
+        Args:
+            sample_fraction (float): The fraction of points to sample. Default is 0.1.
+            random_state (int): Seed for the random number generator. Default is 42.
+        """
+
+        # Perform random sampling
+        self.df = self.df.sample(frac=sample_fraction, random_state=random_state)
+        print(f"Point cloud downsampled with sample fraction {sample_fraction}")
 
 
 class PointCloudHandler:
@@ -338,3 +366,78 @@ class PointCloudHandler:
         """Visualize the point cloud using Open3D."""
 
         o3d.visualization.draw_geometries([self.point_cloud])
+
+
+class PcdFilter:
+    """
+    A class to filter and concatenate DataFrames based on bounding box coordinates.
+
+    Attributes:
+        df (pd.DataFrame): The DataFrame to be filtered.
+        bbox (dict): A dictionary containing the bounding box coordinates.
+    """
+
+    def __init__(self, df, df_target):
+        """
+        Initialize the DataFilter with a DataFrame.
+
+        Args:
+            df (pd.DataFrame): The DataFrame to be filtered.
+        """
+        self.df = df
+        self.df_target = df_target
+        self.bbox = None
+
+    def set_bounding_box_from_target(self, margin=2):
+        """
+        Set the bounding box coordinates based on a target DataFrame with an optional margin.
+
+        Args:
+            df_target (pd.DataFrame): The target DataFrame to compute the bounding box from.
+            margin (float): Margin to extend the bounding box. Default is 2.
+        """
+        x_min, x_max = self.df_target["x"].min(), self.df_target["x"].max()
+        y_min, y_max = self.df_target["y"].min(), self.df_target["y"].max()
+        x_tile = x_max - x_min
+        y_tile = y_max - y_min
+
+        self.bbox = {
+            "x_min": x_min - margin * x_tile,
+            "x_max": x_max + margin * x_tile,
+            "y_min": y_min - margin * y_tile,
+            "y_max": y_max + margin * y_tile
+        }
+
+    def filter_data(self):
+        """
+        Filter the DataFrame based on the bounding box coordinates.
+
+        Returns:
+            pd.DataFrame: The filtered DataFrame.
+        """
+        if self.bbox is None:
+            raise ValueError("Bounding box is not set. Use `set_bounding_box_from_target` method first.")
+
+        filtered_df = self.df[
+            (self.df["x"] >= self.bbox["x_min"]) & (self.df["x"] <= self.bbox["x_max"]) &
+            (self.df["y"] >= self.bbox["y_min"]) & (self.df["y"] <= self.bbox["y_max"])
+        ]
+        return filtered_df
+
+    def concatenate_dataframes(self, df_list):
+        """
+        Concatenate a list of DataFrames.
+
+        Args:
+            df_list (list): A list of DataFrames to concatenate.
+
+        Returns:
+            pd.DataFrame: The concatenated DataFrame.
+        """
+        return pd.concat(df_list, axis=0)
+
+# Example usage
+# filterer = DataFilter(df)
+# filterer.set_bounding_box(x_min, x_max, y_min, y_max, margin=2)
+# df_filtered = filterer.filter_data()
+# combined_df = filterer.concatenate_dataframes([df_filtered, df_ign])
