@@ -1,10 +1,14 @@
+import json
+
 import cv2 as cv
-import open3d as o3d
-import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import open3d as o3d
+import pandas as pd
+import pdal
 import rasterio
 import xarray as xr
+from pyproj import Transformer
 
 
 def load_dem_utm(token, parameters,  bounds, width, height):
@@ -118,6 +122,104 @@ class Sentinel2Reader:
             print("No image data loaded.")
 
 
+class IGNLidarProcessor:
+    """
+    A class to process LiDAR point cloud data from IGN.
+
+    Attributes:
+        input_file (str): Path to the input LiDAR file.
+        df (pd.DataFrame): DataFrame to store the point cloud data.
+    """
+
+    def __init__(self, input_file: str):
+        """
+        Initialize the IGNLidarProcessor with the input file path.
+
+        Args:
+            input_file (str): Path to the input LiDAR file.
+        """
+        self.input_file = input_file
+        self.df = None
+
+    def read_point_cloud(self):
+        """
+        Read the point cloud data from the input file using PDAL.
+
+        Raises:
+            Exception: If there is an error in reading the file.
+        """
+        # Define a PDAL pipeline to read the file
+        pipeline = {
+            "pipeline": [
+                {
+                    "type": "readers.las",
+                    "filename": self.input_file
+                }
+            ]
+        }
+        # Convert the pipeline to JSON format
+        pipeline_json = json.dumps(pipeline)
+        # Initialize the PDAL pipeline
+        p = pdal.Pipeline(pipeline_json)
+        # Execute the pipeline
+        count = p.execute()
+        # Extract the point cloud data
+        pcd = p.arrays
+        self.df = pd.DataFrame(pcd[0])
+
+    def transform_coordinates(self, src_crs: str = "epsg:2154", dst_crs: str = "epsg:32632"):
+        """
+        Transform the coordinates from the source CRS to the destination CRS.
+
+        Args:
+            src_crs (str): Source coordinate reference system. Default is "epsg:2154".
+            dst_crs (str): Destination coordinate reference system. Default is "epsg:32632".
+
+        Raises:
+            ValueError: If the point cloud data has not been read yet.
+        """
+        if self.df is None:
+            raise ValueError("Point cloud data has not been read yet.")
+
+        # Initialize the transformer
+        transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+        # Convert X, Y coordinates
+        utm_easting, utm_northing = transformer.transform(self.df["X"].values, self.df["Y"].values)
+        # Add transformed coordinates to DataFrame
+        self.df["UTM_Easting"] = utm_easting
+        self.df["UTM_Northing"] = utm_northing
+
+        self.df = pd.DataFrame(data={
+            "x": self.df["UTM_Easting"],
+            "y": self.df["UTM_Northing"],
+            "z": self.df["Z"],
+            'classification': self.df["Classification"]
+        })
+
+
+
+    def generate_color(self):
+        """
+        Generate unique colors for each classification in the point cloud data.
+
+        Returns:
+            dict: A dictionary mapping classification values to RGB colors.
+
+        Raises:
+            ValueError: If the point cloud data has not been read yet.
+        """
+        if self.df is None:
+            raise ValueError("Point cloud data has not been read yet.")
+
+        # Get unique classification values
+        unique_classes = self.df["classification"].unique()
+        # Generate unique colors (normalized to [0, 1] for Open3D)
+        num_classes = len(unique_classes)
+        cmap = plt.cm.get_cmap("tab10", num_classes)  # Choose a colormap with enough distinct colors
+        class_colors = {cls: tuple((np.array(cmap(i)[:3]) * 255).astype(int)) for i, cls in enumerate(unique_classes)}
+        self.df["color"] = self.df["classification"].map(class_colors)
+
+
 class PcdGenerator:
     def __init__(self, sat_data, dem_data, sample_fraction=20):
         """
@@ -172,6 +274,41 @@ class PcdGenerator:
         self.df = df[:sample_size]
         print(f"Sampled points: {len(self.df)}")
 
+
+class PointCloudHandler:
+    """
+    A class to handle operations related to the Open3D point cloud object.
+
+    Attributes:
+        df (pd.DataFrame): DataFrame holding point cloud data.
+        point_cloud (o3d.geometry.PointCloud): Open3D PointCloud object.
+    """
+
+    def __init__(self, df):
+        """
+        Initialize the PointCloudHandler with a DataFrame.
+
+        Args:
+            df (pd.DataFrame): DataFrame holding point cloud data.
+        """
+        self.df = df
+        self.point_cloud = None
+
+    def downsample(self, sample_fraction=0.1, random_state=42):
+        """
+        Downsample the point cloud by randomly sampling a fraction of the points.
+
+        Args:
+            sample_fraction (float): The fraction of points to sample. Default is 0.1.
+            random_state (int): Seed for the random number generator. Default is 42.
+        """
+        if self.df is None:
+            raise ValueError("Point cloud data not generated. Run `generate_point_cloud()` first.")
+
+        # Perform random sampling
+        self.df = self.df.sample(frac=sample_fraction, random_state=random_state)
+        print(f"Point cloud downsampled with sample fraction {sample_fraction}")
+
     def to_open3d(self):
         """Convert the DataFrame to an Open3D PointCloud object."""
         if self.df is None:
@@ -187,21 +324,17 @@ class PcdGenerator:
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points)
         pcd.colors = o3d.utility.Vector3dVector(colors)
-
         self.point_cloud = pcd
         return pcd
 
+
     def save_point_cloud(self, filename="point_cloud.ply"):
         """Save the generated point cloud to a file."""
-        if self.point_cloud is None:
-            self.to_open3d()
 
         o3d.io.write_point_cloud(filename, self.point_cloud)
         print(f"Point cloud saved to {filename}")
 
     def visualize(self):
         """Visualize the point cloud using Open3D."""
-        if self.point_cloud is None:
-            self.to_open3d()
 
         o3d.visualization.draw_geometries([self.point_cloud])
