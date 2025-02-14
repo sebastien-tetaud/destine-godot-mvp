@@ -7,6 +7,36 @@ import rasterio
 import xarray as xr
 
 
+def load_dem_utm(token, parameters,  bounds, width, height):
+    """
+    Loads the Copernicus DEM (GLO-30 UTM) and selects the region of interest.
+
+    Parameters:
+        token (str): Authentication token for accessing the dataset.
+        parameters(str): Parameters.
+        bounds (rasterio.coords.BoundingBox): Bounding box with left, right, bottom, top coordinates.
+        width (int): Number of pixels (columns) in the target image.
+        height (int): Number of pixels (rows) in the target image.
+
+    Returns:
+        xarray.DataArray: DEM region of interest.
+    """
+    # Define the dataset URL
+    dem_url = f"https://edh:{token}@data.earthdatahub.destine.eu/copernicus-dem-utm/GLO-30-UTM-v0/32N"
+
+    # Load the dataset
+    dem = xr.open_dataset(dem_url, chunks={}, engine="zarr")
+
+    # Create UTM coordinate grid
+    x = np.linspace(bounds.left, bounds.right, width)
+    y = np.linspace(bounds.bottom, bounds.top, height)
+
+    # Select the DEM region of interest using nearest interpolation
+    dem_roi = dem.sel(x=x, y=y, method="nearest")
+
+    return dem_roi[parameters]
+
+
 class Sentinel2Reader:
     """
     A class to read and preprocess Sentinel-2 satellite L2A.
@@ -87,35 +117,6 @@ class Sentinel2Reader:
         else:
             print("No image data loaded.")
 
-
-def load_dem_utm(token, parameters,  bounds, width, height):
-    """
-    Loads the Copernicus DEM (GLO-30 UTM) and selects the region of interest.
-
-    Parameters:
-        token (str): Authentication token for accessing the dataset.
-        parameters(str): Parameters.
-        bounds (rasterio.coords.BoundingBox): Bounding box with left, right, bottom, top coordinates.
-        width (int): Number of pixels (columns) in the target image.
-        height (int): Number of pixels (rows) in the target image.
-
-    Returns:
-        xarray.DataArray: DEM region of interest.
-    """
-    # Define the dataset URL
-    dem_url = f"https://edh:{token}@data.earthdatahub.destine.eu/copernicus-dem-utm/GLO-30-UTM-v0/32N"
-
-    # Load the dataset
-    dem = xr.open_dataset(dem_url, chunks={}, engine="zarr")
-
-    # Create UTM coordinate grid
-    x = np.linspace(bounds.left, bounds.right, width)
-    y = np.linspace(bounds.bottom, bounds.top, height)
-
-    # Select the DEM region of interest using nearest interpolation
-    dem_roi = dem.sel(x=x, y=y, method="nearest")
-
-    return dem_roi[parameters]
 
 class PcdGenerator:
     def __init__(self, sat_data, dem_data, sample_fraction=20):
