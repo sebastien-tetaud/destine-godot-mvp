@@ -13,23 +13,27 @@ var baseMaterial
 var initialPointSize = 3
 
 
+### DEM ###
+var terrainMeshInstance
+var terrainMaterial
+
+
 func _ready():
 	initializeMaterial()
+
 
 func _on_options_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/labeled_city_view.tscn")
 
+
 func _on_load_pressed() -> void:
 	labeledPoints[UNLABELED_LABEL] = PackedVector3Array()
-	var filePath = "res://data/labeled_city_view.txt"
+	var filePath = "res://data/LHD_FXX_0648_6863_PTS_O_LAMB93_IGN69.txt"
 	loadPointcloudFile(filePath)
 	translatePointcloud()
 	savePointCloudData()
 	get_tree().change_scene_to_file("res://scenes/point_cloud_view.tscn")
 
-
-func _on_exit_pressed() -> void:
-	get_tree().quit()
 
 func loadPointcloudFile(filePath, limit=null):
 	var file = FileAccess.open(filePath, FileAccess.READ)
@@ -52,26 +56,6 @@ func loadPointcloudFile(filePath, limit=null):
 			labeledPoints[label].append(point)
 		else:
 			labeledPoints[UNLABELED_LABEL].append(point)
-
-#
-#func loadPointcloudFile(filePath, limit=null):
-	#var file = FileAccess.open(filePath, FileAccess.READ)
-	#limit = file.get_length() if limit == null else limit
-	#var seperator = " "
-	#for i in range(limit):
-		#var line = file.get_csv_line(seperator)
-		#if len(line) < 3: continue
-		#
-		#var point = Vector3(float(line[0]), float(line[2]), float(line[1]))
-		#updateExtents(point)
-		#
-		#var label = UNLABELED_LABEL
-		#if useLabels and len(line) == 4:
-			#label = line[3]
-			#if !labeledPoints.has(line[3]):
-				#labeledPoints[line[3]] = PackedVector3Array()
-			#
-		#labeledPoints[label].push_back(point)
 
 
 func translatePointcloud():
@@ -112,3 +96,41 @@ func savePointCloudData():
 	var variables = get_node("/root/Variables")  # Accessing the singleton
 	variables.labeledPoints = labeledPoints
 	variables.extent = extent
+	
+
+func _on_exit_pressed() -> void:
+	get_tree().quit()
+
+
+func loadElevationTerrain(filePath):
+	# Load the image as a resource
+	var image_resource = ResourceLoader.load(filePath)
+	if not image_resource:
+		print("Failed to load terrain image.")
+		return
+
+	# Convert the resource to an Image
+	var image = image_resource.get_data()
+	if not image:
+		print("Failed to get image data.")
+		return
+
+	# Create a heightmap mesh
+	var heightmap = HeightMapShape3D.new()
+	heightmap.set_data(image, 100.0)  # 100.0 is the height scaling factor
+
+	# Create a mesh instance for the terrain
+	terrainMeshInstance = MeshInstance3D.new()
+	terrainMeshInstance.mesh = heightmap.create_mesh()
+
+	# Apply a material to the terrain
+	terrainMaterial = StandardMaterial3D.new()
+	terrainMaterial.albedo_color = Color(0.3, 0.7, 0.3)  # Green terrain
+	terrainMeshInstance.material_override = terrainMaterial
+
+	# Add the terrain to the scene
+	add_child(terrainMeshInstance)
+	
+func _on_dem_pressed():
+	
+	get_tree().change_scene_to_file("res://scenes/dem.tscn")

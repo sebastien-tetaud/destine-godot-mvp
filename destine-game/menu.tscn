@@ -1,0 +1,62 @@
+[gd_scene load_steps=3 format=3 uid="uid://chfqi7hrw4wsi"]
+
+[ext_resource type="Script" path="res://scripts/menu.gd" id="1_j062o"]
+
+[sub_resource type="Theme" id="Theme_3rq1y"]
+
+[node name="menu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_j062o")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0057737, 0.0540401, 0.0909626, 1)
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
+layout_mode = 2
+
+[node name="title" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "Destination Earth"
+horizontal_alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="load" type="Button" parent="CenterContainer/VBoxContainer/VBoxContainer"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+theme = SubResource("Theme_3rq1y")
+text = "Load"
+
+[node name="exit" type="Button" parent="CenterContainer/VBoxContainer/VBoxContainer"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+theme = SubResource("Theme_3rq1y")
+text = "Exit"
+
+[node name="Button" type="Button" parent="CenterContainer/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+text = "DEM"
+
+[connection signal="pressed" from="CenterContainer/VBoxContainer/VBoxContainer/load" to="." method="_on_load_pressed"]
+[connection signal="pressed" from="CenterContainer/VBoxContainer/VBoxContainer/exit" to="." method="_on_exit_pressed"]
+[connection signal="pressed" from="CenterContainer/VBoxContainer/VBoxContainer/Button" to="." method="_on_dem_pressed"]

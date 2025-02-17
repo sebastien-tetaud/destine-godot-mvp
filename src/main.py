@@ -15,7 +15,7 @@ dem_data = load_dem_utm(token, parameter, bounds, width, height)
 pcd_gen = PcdGenerator(reader.data, dem_data)
 
 pcd_gen.generate_point_cloud()
-pcd_gen.downsample(sample_fraction=0.4)
+pcd_gen.downsample(sample_fraction=0.35)
 
 handler = PointCloudHandler(pcd_gen.df)
 handler.to_open3d()
