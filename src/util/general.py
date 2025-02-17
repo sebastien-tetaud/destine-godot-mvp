@@ -236,18 +236,16 @@ class IGNLidarProcessor:
 
 
 class PcdGenerator:
-    def __init__(self, sat_data, dem_data, sample_fraction=0.2):
+    def __init__(self, sat_data, dem_data):
         """
         Initialize the PCD Generator.
 
         Args:
             sat_data (numpy.ndarray): Sentinel-2 RGB data with shape (H, W, 3).
             dem_data (xarray.DataArray): DEM data with coordinates.
-            sample_fraction (int): Percentage of points to sample (default: 20%).
         """
         self.sat_data = sat_data
         self.dem_data = dem_data
-        self.sample_fraction = sample_fraction
         self.point_cloud = None
         self.df = None  # Dataframe holding point cloud data
 
