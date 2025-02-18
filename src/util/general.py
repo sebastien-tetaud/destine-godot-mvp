@@ -367,10 +367,10 @@ class PointCloudHandler:
             raise ValueError("Point cloud not generated yet.")
 
         self.point_cloud.estimate_normals()
-        mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(self.point_cloud, depth=depth)
+        mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(self.point_cloud, depth=depth)
 
         if mesh.is_empty():
-            raise RuntimeError("Surface reconstruction failed!")
+            raise RuntimeError("Surface reconstruction failed")
 
         self.mesh = mesh
         print("Mesh generated successfully.")

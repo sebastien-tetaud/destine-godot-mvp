@@ -1,7 +1,10 @@
 import sys
 import os
-from util.general import (Sentinel2Reader, load_dem_utm,
-                     PcdGenerator, PointCloudHandler)
+import numpy as np
+import open3d as o3d
+
+
+from util.general import Sentinel2Reader, load_dem_utm, PcdGenerator, PointCloudHandler
 
 token = os.environ.get('hdb_token')
 product_path = "/home/ubuntu/project/destine-godot-mvp/src/sentinel2-data/T32TLR_20241030T103151_TCI_20m.jp2"
@@ -15,8 +18,11 @@ dem_data = load_dem_utm(token, parameter, bounds, width, height)
 pcd_gen = PcdGenerator(reader.data, dem_data)
 
 pcd_gen.generate_point_cloud()
-pcd_gen.downsample(sample_fraction=0.35)
+pcd_gen.downsample(sample_fraction=0.90)
 
 handler = PointCloudHandler(pcd_gen.df)
 handler.to_open3d()
-handler.save_point_cloud(filename="model.ply")
+handler.generate_mesh(depth=9)
+# handler.save_point_cloud("point_cloud.ply")
+handler.save_mesh("mesh.glb")
+
