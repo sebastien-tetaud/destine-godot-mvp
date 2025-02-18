@@ -319,6 +319,7 @@ class PointCloudHandler:
         """
         self.df = df
         self.point_cloud = None
+        self.mesh = None  # Store mesh object
 
     def downsample(self, sample_fraction=0.1, random_state=42):
         """
@@ -329,39 +330,73 @@ class PointCloudHandler:
             random_state (int): Seed for the random number generator. Default is 42.
         """
         if self.df is None:
-            raise ValueError("Point cloud data not generated. Run `generate_point_cloud()` first.")
+            raise ValueError("Point cloud data not available.")
 
-        # Perform random sampling
         self.df = self.df.sample(frac=sample_fraction, random_state=random_state)
-        print(f"Point cloud downsampled with sample fraction {sample_fraction}")
+        print(f"Point cloud downsampled (fraction: {sample_fraction})")
 
     def to_open3d(self):
-        """Convert the DataFrame to an Open3D PointCloud object."""
+        """Convert the DataFrame to an Open3D PointCloud object, normalize, and assign colors."""
         if self.df is None:
-            raise ValueError("Point cloud data not generated. Run `generate_point_cloud()` first.")
+            raise ValueError("Point cloud data not available.")
 
-        # Stack coordinates into a (N, 3) numpy array
-        points = np.column_stack((self.df['x'], self.df['y'], self.df['z'].values))
+        # Extract XYZ coordinates
+        xyz = self.df[['x', 'y', 'z']].values.astype(np.float64)
 
-        # Convert RGB colors to float values in range [0,1]
-        colors = np.array(self.df['color'].apply(lambda x: np.array(x))) / 255.0
+        # Normalize: Center and Scale
+        center = np.mean(xyz, axis=0)
+        xyz -= center  # Center the point cloud
+        scale_factor = np.max(np.abs(xyz))  # Get the largest absolute value
+        xyz /= scale_factor  # Scale to fit within a reasonable range
 
+        # Extract and normalize colors
+        colors = np.stack(self.df['color'].apply(lambda x: np.array(x) / 255.0))
+        colors = np.clip(colors, 0.0, 1.0)
         # Create Open3D PointCloud object
         pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.points = o3d.utility.Vector3dVector(xyz)
         pcd.colors = o3d.utility.Vector3dVector(colors)
+
         self.point_cloud = pcd
+        print("Open3D PointCloud object created successfully.")
         return pcd
 
+    def generate_mesh(self, depth=9):
+        """Generate a 3D mesh from the point cloud using Poisson reconstruction."""
+        if self.point_cloud is None:
+            raise ValueError("Point cloud not generated yet.")
+
+        self.point_cloud.estimate_normals()
+        mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(self.point_cloud, depth=depth)
+
+        if mesh.is_empty():
+            raise RuntimeError("Surface reconstruction failed!")
+
+        self.mesh = mesh
+        print("Mesh generated successfully.")
+        return mesh
 
     def save_point_cloud(self, filename="point_cloud.ply"):
-        """Save the generated point cloud to a file."""
+        """Save the point cloud to a file."""
+        if self.point_cloud is None:
+            raise ValueError("Point cloud not generated yet.")
 
         o3d.io.write_point_cloud(filename, self.point_cloud)
         print(f"Point cloud saved to {filename}")
 
+
+    def save_mesh(self, filename="mesh.glb"):
+        """Save the mesh as GLB format."""
+        if self.mesh is None:
+            raise ValueError("Mesh not generated yet.")
+
+        o3d.io.write_triangle_mesh(filename, self.mesh)
+        print(f"Mesh saved to {filename} (GLB format).")
+
     def visualize(self):
         """Visualize the point cloud using Open3D."""
+        if self.point_cloud is None:
+            raise ValueError("Point cloud not generated yet.")
 
         o3d.visualization.draw_geometries([self.point_cloud])
 
