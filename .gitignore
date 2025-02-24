@@ -6,6 +6,7 @@ dem-data/
 *.png
 *.jpg
 *.tif
+*.glb
 *.laz
 *.ply
 *.html
