@@ -1,7 +1,5 @@
 #custom
-data/
 sentinel2-data/
-ign-resources/
 dem-data/
 *.png
 *.jpg
@@ -10,7 +8,10 @@ dem-data/
 *.laz
 *.ply
 *.html
-
+*.shp
+*.shx
+*.prj
+*.dbf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

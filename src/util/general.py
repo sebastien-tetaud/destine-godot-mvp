@@ -1,3 +1,36 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+===========================================================
+Sentinel-2, Copernicus DEM and LiDAR Data Processing Tool
+===========================================================
+
+This script provides a set of classes and functions to process
+Copernicus DEM, Sentinel-2 L2A product, IGN LiDAR point cloud data.
+The primary functionalities include:
+
+- Loading and preprocessing Sentinel-2 imagery
+- Extracting and processing DEM data
+- Reading, transforming, and filtering LiDAR point cloud data
+- Generating and visualizing point clouds and 3D meshes
+- Downsampling and filtering datasets for optimized processing
+
+Dependencies:
+- numpy
+- pandas
+- rasterio
+- xarray
+- open3d
+- pdal
+- pyproj
+- matplotlib
+- opencv (cv2)
+
+Author: Sébastien Tétaud
+Date: 2025-03-14
+License: Apache 2.0
+"""
+
 import json
 
 import cv2 as cv
@@ -11,25 +44,30 @@ import xarray as xr
 from pyproj import Transformer
 
 
-def load_dem_utm(token, parameters,  bounds, width, height):
+import xarray as xr
+import numpy as np
+
+def load_dem_utm(url, bounds, width, height):
     """
-    Loads the Copernicus DEM (GLO-30 UTM) and selects the region of interest.
+    Loads the Copernicus DEM and selects the region of interest.
 
     Parameters:
-        token (str): Authentication token for accessing the dataset.
-        parameters(str): Parameters.
-        bounds (rasterio.coords.BoundingBox): Bounding box with left, right, bottom, top coordinates.
+        url (str): URL of the DEM dataset.
+        bounds (rasterio.coords.BoundingBox): Bounding box with left,
+            right, bottom, and top coordinates.
         width (int): Number of pixels (columns) in the target image.
         height (int): Number of pixels (rows) in the target image.
 
     Returns:
         xarray.DataArray: DEM region of interest.
     """
-    # Define the dataset URL
-    dem_url = f"https://edh:{token}@data.earthdatahub.destine.eu/copernicus-dem-utm/GLO-30-UTM-v0/32N"
-
     # Load the dataset
-    dem = xr.open_dataset(dem_url, chunks={}, engine="zarr")
+    dem = xr.open_dataset(
+        url,
+        chunks={},
+        storage_options={"client_kwargs": {"trust_env": True}},
+        engine="zarr"
+    )
 
     # Create UTM coordinate grid
     x = np.linspace(bounds.left, bounds.right, width)
@@ -38,23 +76,24 @@ def load_dem_utm(token, parameters,  bounds, width, height):
     # Select the DEM region of interest using nearest interpolation
     dem_roi = dem.sel(x=x, y=y, method="nearest")
 
-    return dem_roi[parameters]
+    return dem_roi
 
 
 class Sentinel2Reader:
     """
-    A class to read and preprocess Sentinel-2 satellite L2A.
+    A class to read and preprocess Sentinel-2 satellite L2A product.
 
     This class loads Sentinel-2 L2A product, extracts metadata, and provides
-    functionalities for preprocessing (flipping and transposing) and visualization.
+    functionalities for preprocessing (flipping and transposing)
+    and visualization.
 
     Attributes:
         filepath (str): Path to the Sentinel-2 image file.
-        data (numpy.ndarray or None): Image data after reading and preprocessing.
-        bounds (rasterio.coords.BoundingBox or None): Bounding box of the image.
-        transform (Affine or None): Affine transformation matrix of the image.
-        height (int or None): Number of rows (pixels) in the image.
-        width (int or None): Number of columns (pixels) in the image.
+        data (numpy.ndarray or None): Image after reading and preprocessing.
+        bounds (rasterio.coords.BoundingBox or None): Bounding box.
+        transform (Affine or None): Affine transformation matrix.
+        height (int or None): Number of rows (pixels).
+        width (int or None): Number of columns (pixels).
     """
 
     def __init__(self, filepath, preprocess=True):
@@ -63,7 +102,7 @@ class Sentinel2Reader:
 
         Args:
             filepath (str): Path to the Sentinel-2 image file.
-            preprocess (bool, optional): Whether to preprocess the image (default is True).
+            preprocess (bool, optional): Whether to preprocess the image.
         """
         self.filepath = filepath
         self.data = None
@@ -110,9 +149,6 @@ class Sentinel2Reader:
     def show_image(self):
         """
         Displays the processed Sentinel-2 image.
-
-        If the image is loaded and processed, it will be displayed using Matplotlib.
-        Otherwise, an error message is printed.
         """
         if self.data is not None:
             plt.imshow(self.data)
@@ -162,7 +198,7 @@ class IGNLidarProcessor:
         # Initialize the PDAL pipeline
         p = pdal.Pipeline(pipeline_json)
         # Execute the pipeline
-        count = p.execute()
+        _ = p.execute()
         # Extract the point cloud data
         pcd = p.arrays
         self.df = pd.DataFrame(pcd[0])
@@ -184,7 +220,8 @@ class IGNLidarProcessor:
         # Initialize the transformer
         transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
         # Convert X, Y coordinates
-        utm_easting, utm_northing = transformer.transform(self.df["X"].values, self.df["Y"].values)
+        utm_easting, utm_northing = transformer.transform(self.df["X"].values,
+                                                          self.df["Y"].values)
         # Add transformed coordinates to DataFrame
         self.df["UTM_Easting"] = utm_easting
         self.df["UTM_Northing"] = utm_northing
@@ -211,7 +248,17 @@ class IGNLidarProcessor:
         self.df = self.df.sample(frac=sample_fraction, random_state=random_state)
         print(f"Point cloud downsampled with sample fraction {sample_fraction}")
 
+    def classes_filtering(self, list_classes=[9, 6]):
+        """
+        Filter the point cloud data based on specified classification values.
 
+        Args:
+            list_classes (list): List of classification values to keep. Default is [9, 6].
+        """
+        if self.df is None:
+            raise ValueError("Point cloud data has not been read yet.")
+
+        self.df = self.df[self.df['classification'].isin(list_classes)]
 
     def generate_color(self):
         """
@@ -228,11 +275,32 @@ class IGNLidarProcessor:
 
         # Get unique classification values
         unique_classes = self.df["classification"].unique()
-        # Generate unique colors (normalized to [0, 1] for Open3D)
         num_classes = len(unique_classes)
         cmap = plt.cm.get_cmap("tab10", num_classes)  # Choose a colormap with enough distinct colors
         class_colors = {cls: tuple((np.array(cmap(i)[:3]) * 255).astype(int)) for i, cls in enumerate(unique_classes)}
         self.df["color"] = self.df["classification"].map(class_colors)
+
+    def assign_custom_colors(self):
+        """
+        Assign custom colors for specific classification categories.
+        """
+        if self.df is None:
+            raise ValueError("Point cloud data has not been read yet.")
+
+        color_mapping = {
+            1: (200, 200, 200),   # Non classé (Gray)
+            2: (139, 69, 19),     # Sol (Brown)
+            3: (34, 139, 34),     # Végétation basse (Green)
+            4: (0, 100, 0),       # Végétation moyenne (Dark Green)
+            5: (0, 50, 0),        # Végétation haute (Darker Green)
+            6: (255, 0, 0),       # Bâtiment (Red)
+            66: (255, 20, 147)    # Points virtuels (Pink)
+        }
+
+        self.df["color"] = self.df["classification"].map(lambda x: np.array(color_mapping.get(x, (0, 0, 0)), dtype=np.int64))
+        self.df["color"] = self.df["color"].apply(
+            lambda x: np.array(x[:3]) if isinstance(x, (list, tuple, np.ndarray)) and len(x) >= 3 else np.array([0, 0, 0])
+        )
 
 
 class PcdGenerator:
@@ -332,7 +400,8 @@ class PointCloudHandler:
         if self.df is None:
             raise ValueError("Point cloud data not available.")
 
-        self.df = self.df.sample(frac=sample_fraction, random_state=random_state)
+        self.df = self.df.sample(frac=sample_fraction,
+                                 random_state=random_state)
         print(f"Point cloud downsampled (fraction: {sample_fraction})")
 
     def to_open3d(self):
@@ -383,7 +452,6 @@ class PointCloudHandler:
 
         o3d.io.write_point_cloud(filename, self.point_cloud)
         print(f"Point cloud saved to {filename}")
-
 
     def save_mesh(self, filename="mesh.glb"):
         """Save the mesh as GLB format."""
